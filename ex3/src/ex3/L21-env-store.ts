@@ -17,18 +17,19 @@ export interface Store {
     vals: Box<Value>[];
 }
 
-export const isStore = ...;
-export const makeEmptyStore = ...;
-export const theStore: Store = 
+export const isStore = (x: any): x is Store => x.tag === "Store";
+export const makeEmptyStore = (): Store => ({tag: "Store",vals:[]});
+export const theStore: Store = makeEmptyStore();
 export const extendStore = (s: Store, val: Value): Store =>
-    // Complete
+({tag: "Store",vals:s.vals.concat([makeBox(val)])});
+
     
 export const applyStore = (store: Store, address: number): Result<Value> =>
-    // Complete
+    makeOk(unbox(store.vals[address]));
 
     
 export const setStore = (store: Store, address: number, val: Value): void => 
-    // Complete
+    setBox(store.vals[address],val)
 
 
 // ========================================================
@@ -40,6 +41,7 @@ interface GlobalEnv {
     tag: "GlobalEnv";
     vars: Box<string[]>;
     addresses: Box<number[]>
+    store:Store
 }
 
 export interface ExtEnv {
@@ -50,7 +52,7 @@ export interface ExtEnv {
 }
 
 const makeGlobalEnv = (): GlobalEnv =>
-    ({tag: "GlobalEnv", vars: makeBox([]), addresses:makeBox([])});
+    ({tag: "GlobalEnv", vars: makeBox([]), addresses:makeBox([]),store:theStore});
 
 export const isGlobalEnv = (x: any): x is GlobalEnv => x.tag === "GlobalEnv";
 
@@ -70,10 +72,15 @@ export const applyEnv = (env: Env, v: string): Result<number> =>
     applyExtEnv(env, v);
 
 const applyGlobalEnv = (env: GlobalEnv, v: string): Result<number> => 
-    // Complete
+    unbox(env.vars).includes(v) ? makeOk(unbox(env.addresses)[unbox(env.vars).indexOf(v)]) :
+    makeFailure("value was not found :(");
+
 
 export const globalEnvAddBinding = (v: string, addr: number): void =>
-    // Complete
+    {
+        setBox(theGlobalEnv.vars,unbox(theGlobalEnv.vars).concat([v]));
+        setBox(theGlobalEnv.addresses,unbox(theGlobalEnv.addresses).concat([addr]));
+    }
 
 const applyExtEnv = (env: ExtEnv, v: string): Result<number> =>
     env.vars.includes(v) ? makeOk(env.addresses[env.vars.indexOf(v)]) :

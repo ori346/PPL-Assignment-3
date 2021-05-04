@@ -10,7 +10,7 @@ import { applyEnv, makeExtEnv, Env, Store, setStore, extendStore, ExtEnv, applyE
 import { isClosure, makeClosure, Closure, Value } from "./L21-value-store";
 import { applyPrimitive } from "./evalPrimitive-store";
 import { first, rest, isEmpty } from "../shared/list";
-import { Result, bind, safe2, mapResult, makeFailure, makeOk } from "../shared/result";
+import { Result, bind, safe2, mapResult, makeFailure, makeOk, isOk } from "../shared/result";
 import { parse as p } from "../shared/parser";
 
 // ========================================================
@@ -67,6 +67,13 @@ const evalCExps = (first: Exp, rest: Exp[], env: Env): Result<Value> =>
 
 const evalDefineExps = (def: DefineExp, exps: Exp[]): Result<Value> =>
     // complete
+    {
+        const value  = applicativeEval(def.val,theGlobalEnv);
+        bind(value,(val1:Value)=> (makeOk(theGlobalEnv.store = extendStore(theGlobalEnv.store ,val1 ))));
+        const addr = theGlobalEnv.store.vals.length-1;
+        globalEnvAddBinding(def.var.var,addr);
+        return evalSequence(exps,theGlobalEnv);
+    }
 
 // Main program
 // L2-BOX @@ Use GE instead of empty-env
@@ -75,6 +82,11 @@ export const evalProgram = (program: Program): Result<Value> =>
 
 export const evalParse = (s: string): Result<Value> =>
     bind(bind(p(s), parseL21Exp), (exp: Exp) => evalSequence([exp], theGlobalEnv));
+
+
+const evalSet = (exp: SetExp, env: Env): Result<void> =>
+    safe2((val: Value, bdg: FBinding) => makeOk(setFBinding(bdg, val)))
+        (applicativeEval(exp.val, env), applyEnvBdg(env, exp.var.var));
 
 // LET: Direct evaluation rule without syntax expansion
 // compute the values, extend the env, eval the body.
