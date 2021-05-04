@@ -5,7 +5,7 @@
 import { map, reduce, repeat, zipWith } from "ramda";
 import { isBoolExp, isCExp, isLitExp, isNumExp, isPrimOp, isStrExp, isVarRef,
          isAppExp, isDefineExp, isIfExp, isLetExp, isProcExp, Binding, VarDecl, CExp, Exp, IfExp, LetExp, ProcExp, Program,
-         parseL21Exp, DefineExp} from "./L21-ast";
+         parseL21Exp, DefineExp, isSetExp, SetExp} from "./L21-ast";
 import { applyEnv, makeExtEnv, Env, Store, setStore, extendStore, ExtEnv, applyEnvStore, theGlobalEnv, globalEnvAddBinding, theStore } from "./L21-env-store";
 import { isClosure, makeClosure, Closure, Value } from "./L21-value-store";
 import { applyPrimitive } from "./evalPrimitive-store";
@@ -21,7 +21,8 @@ const applicativeEval = (exp: CExp, env: Env): Result<Value> =>
     isBoolExp(exp) ? makeOk(exp.val) :
     isStrExp(exp) ? makeOk(exp.val) :
     isPrimOp(exp) ? makeOk(exp) :
-    isVarRef(exp) ? ...§ :
+    isVarRef(exp) ? applyEnv(env,exp.var):
+    isSetExp(exp) ? evalSet(exp,env):
     isLitExp(exp) ? makeOk(exp.val as Value) :
     isIfExp(exp) ? evalIf(exp, env) :
     isProcExp(exp) ? evalProc(exp, env) :
@@ -39,6 +40,7 @@ const evalIf = (exp: IfExp, env: Env): Result<Value> =>
 
 const evalProc = (exp: ProcExp, env: Env): Result<Closure> =>
     makeOk(makeClosure(exp.args, exp.body, env));
+
 
 // KEY: This procedure does NOT have an env parameter.
 //      Instead we use the env of the closure.
@@ -66,7 +68,6 @@ const evalCExps = (first: Exp, rest: Exp[], env: Env): Result<Value> =>
     first;
 
 const evalDefineExps = (def: DefineExp, exps: Exp[]): Result<Value> =>
-    // complete
     {
         const value  = applicativeEval(def.val,theGlobalEnv);
         bind(value,(val1:Value)=> (makeOk(theGlobalEnv.store = extendStore(theGlobalEnv.store ,val1 ))));
