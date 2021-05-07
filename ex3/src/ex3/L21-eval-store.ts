@@ -6,23 +6,25 @@ import { map, reduce, repeat, zipWith } from "ramda";
 import { isBoolExp, isCExp, isLitExp, isNumExp, isPrimOp, isStrExp, isVarRef,
          isAppExp, isDefineExp, isIfExp, isLetExp, isProcExp, Binding, VarDecl, CExp, Exp, IfExp, LetExp, ProcExp, Program,
          parseL21Exp, DefineExp, isSetExp, SetExp} from "./L21-ast";
-import { applyEnv, makeExtEnv, Env, Store, setStore, extendStore, ExtEnv, applyEnvStore, theGlobalEnv, globalEnvAddBinding, theStore, FBinding, isGlobalEnv } from "./L21-env-store";
+import { applyEnv, makeExtEnv, Env, Store, setStore, extendStore, ExtEnv, theGlobalEnv, globalEnvAddBinding, theStore, isGlobalEnv, applyStore } from "./L21-env-store";
 import { isClosure, makeClosure, Closure, Value } from "./L21-value-store";
 import { applyPrimitive } from "./evalPrimitive-store";
 import { first, rest, isEmpty } from "../shared/list";
 import { Result, bind, safe2, mapResult, makeFailure, makeOk, isOk, either } from "../shared/result";
 import { parse as p } from "../shared/parser";
 import { connect } from "node:http2";
+import { setBox } from "../shared/box";
 
 // ========================================================
 // Eval functions
 
-const applicativeEval = (exp: CExp, env: Env): Result<Value> =>
-    isNumExp(exp) ? makeOk(exp.val) :
+const applicativeEval = (exp: CExp, env: Env): Result<Value> =>{
+    console.log(exp)
+    return isNumExp(exp) ? makeOk(exp.val) :
     isBoolExp(exp) ? makeOk(exp.val) :
     isStrExp(exp) ? makeOk(exp.val) :
     isPrimOp(exp) ? makeOk(exp) :
-    isVarRef(exp) ? applyEnv(env,exp.var):
+    isVarRef(exp) ? bind(applyEnv(env,exp.var), num => applyStore(theGlobalEnv.store ,num)):
     isSetExp(exp) ? evalSet(exp,env):
     isLitExp(exp) ? makeOk(exp.val as Value) :
     isIfExp(exp) ? evalIf(exp, env) :
@@ -31,7 +33,7 @@ const applicativeEval = (exp: CExp, env: Env): Result<Value> =>
     isAppExp(exp) ? safe2((proc: Value, args: Value[]) => applyProcedure(proc, args))
                         (applicativeEval(exp.rator, env), mapResult((rand: CExp) => applicativeEval(rand, env), exp.rands)) :
     exp;
-
+}
 export const isTrueValue = (x: Value): boolean =>
      (x === true);
 
@@ -52,7 +54,9 @@ const applyProcedure = (proc: Value, args: Value[]): Result<Value> =>
 
 const applyClosure = (proc: Closure, args: Value[]): Result<Value> => {
     const vars = map((v: VarDecl) => v.var, proc.params);
-    const addresses =  reduce(reduce_func, [],args);
+    const addresses:number[] =  reduce(reduce_func, [],args);
+    //console.log(addresses)
+    //console.log(vars)
     const newEnv: ExtEnv = makeExtEnv(vars, addresses, proc.env)
     return evalSequence(proc.body, newEnv);
 }
@@ -76,13 +80,20 @@ const evalCExps = (first: Exp, rest: Exp[], env: Env): Result<Value> =>
     first;
 
 const evalDefineExps = (def: DefineExp, exps: Exp[]): Result<Value> =>
-    {
-        const value  = applicativeEval(def.val,theGlobalEnv);
-        bind(value,(val1:Value)=> (makeOk(theGlobalEnv.store = extendStore(theGlobalEnv.store ,val1 ))));
-        const addr = theGlobalEnv.store.vals.length-1;
-        globalEnvAddBinding(def.var.var,addr);
-        return evalSequence(exps,theGlobalEnv);
-    }
+    bind(applicativeEval(def.val, theGlobalEnv),
+            (rhs: Value) => {   
+                                //console.log("val: "+rhs)
+                                globalEnvAddBinding(def.var.var, theGlobalEnv.store.vals.length);
+                                theGlobalEnv.store = extendStore(theGlobalEnv.store , rhs)
+                                return evalSequence(exps, theGlobalEnv); }); 
+// const evalDefineExps = (def: DefineExp, exps: Exp[]): Result<Value> =>
+//     {
+//         const value  = applicativeEval(def.val,theGlobalEnv);
+//         bind(value,(val1:Value)=> (makeOk(theGlobalEnv.store = extendStore(theGlobalEnv.store ,val1 ))));
+//         const addr = theGlobalEnv.store.vals.length;
+//         globalEnvAddBinding(def.var.var,addr);
+//         return evalSequence(exps,theGlobalEnv);
+//     }
 
 // Main program
 // L2-BOX @@ Use GE instead of empty-env
@@ -93,9 +104,17 @@ export const evalParse = (s: string): Result<Value> =>
     bind(bind(p(s), parseL21Exp), (exp: Exp) => evalSequence([exp], theGlobalEnv));
 
 //
-const evalSet = (exp: SetExp, env: Env): Result<void> =>
-    safe2((val: Value, bdg: FBinding) => makeOk(setFBinding(bdg, val)))
-        (applicativeEval(exp.val, env), applyEnvBdg(env, exp.var.var));
+ const evalSet = (exp: SetExp, env: Env): Result<void> =>{ 
+    const value:Result<Value> = applicativeEval(exp.val,env)
+    console.log(value)
+    return bind(applyEnv(env, exp.var.var), num => bind( value,val=> makeOk(setStore(theGlobalEnv.store,num,val))))
+ }
+  
+
+
+const set = (num:number):number =>{
+    return num;
+}
 
 // LET: Direct evaluation rule without syntax expansion
 // compute the values, extend the env, eval the body.
@@ -103,39 +122,12 @@ const evalLet = (exp: LetExp, env: Env): Result<Value> => {
     const vals = mapResult((v: CExp) => applicativeEval(v, env), map((b: Binding) => b.val, exp.bindings));
     const vars = map((b: Binding) => b.var.var, exp.bindings);
 
-    
     return bind(vals, (vals: Value[]) => {
-        const addresses = ...
+        const addresses:number[] = reduce(reduce_func,[],vals)
+        console.log(theGlobalEnv.store)
+        console.log(addresses)
         const newEnv = makeExtEnv(vars, addresses, env)
         return evalSequence(exp.body, newEnv);
     })
 }
-function setFBinding(bdg: FBinding, val: string | number | boolean | void | Closure | import("./L21-ast").PrimOp | import("./L21-value-store").SymbolSExp | import("./L21-value-store").EmptySExp | import("./L21-value-store").CompoundSExp): any {
-    throw new Error("Function not implemented.");
-}
-
-export const applyEnvBdg = (env: Env, v: string): Result<FBinding> =>
-    isGlobalEnv(env) ? applyGlobalEnvBdg(env, v) :
-    isExtEnv(env) ? applyExtEnvBdg(env, v) :
-    env;
-
-function addresses(vars: string[], addresses: any, env: Env) {
-    throw new Error("Function not implemented.");
-}
-
-const applyGlobalEnvBdg = (ge:GlobalEnv, v: string): Result<FBinding> =>
-    applyFrame(unbox(ge.frame), v);
-
-
-const applyExtEnvBdg = (env: ExtEnv, v: string): Result<FBinding> =>
-    either(applyFrame(env.frame, v), makeOk, _ => applyEnvBdg(env.env, v));
-
-
-const applyFrame = (frame: Frame, v: string): Result<FBinding> => {
-    const pos = frameVars(frame).indexOf(v);
-        return (pos > -1) ? makeOk(frame.fbindings[pos]) : makeFailure(`Var not found: ${v}`);
-    };
-
-export const frameVars = (frame: Frame): string[] => map(getFBindingVar, frame.fbindings);
-export const frameVals = (frame: Frame): Value[] => map(getFBindingVal, frame.fbindings);
     
