@@ -72,9 +72,9 @@ export interface LitExp {tag: "LitExp"; val: SExpValue; }
 export interface SetExp {tag: "SetExp", var: VarRef; val: CExp; }
 
 // To help parser - define a type for reserved key words.
-export type SpecialFormKeyword = "lambda" | "let" | "if";
+export type SpecialFormKeyword = "lambda" | "let" | "if" | "set!";
 const isSpecialFormKeyword = (x: string): x is SpecialFormKeyword =>
-    ["if", "lambda", "let", "quote"].includes(x);
+    ["if", "lambda", "let", "quote" ,"set!"].includes(x);
 
 /*
     ;; <prim-op>  ::= + | - | * | / | < | > | = | not | and | or | eq? | string=?
