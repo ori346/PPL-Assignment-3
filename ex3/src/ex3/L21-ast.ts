@@ -20,7 +20,6 @@ import { makeEmptySExp, makeSymbolSExp, SExpValue, makeCompoundSExp, valueToStri
 ;; - Primitives: cons, car, cdr, list?
 ;; - The empty-list literal expression
 ;; - The Let abbreviation is also supported.
-
 ;; <program> ::= (L2 <exp>+) // Program(exps:List(exp))
 ;; <exp4> ::= <define> | <cexp>               / DefExp | CExp
 ;; <define> ::= ( define <var> <cexp> )       / DefExp(var:VarDecl, val:CExp)
