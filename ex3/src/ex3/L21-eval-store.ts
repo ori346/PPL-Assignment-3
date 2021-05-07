@@ -6,12 +6,13 @@ import { map, reduce, repeat, zipWith } from "ramda";
 import { isBoolExp, isCExp, isLitExp, isNumExp, isPrimOp, isStrExp, isVarRef,
          isAppExp, isDefineExp, isIfExp, isLetExp, isProcExp, Binding, VarDecl, CExp, Exp, IfExp, LetExp, ProcExp, Program,
          parseL21Exp, DefineExp, isSetExp, SetExp} from "./L21-ast";
-import { applyEnv, makeExtEnv, Env, Store, setStore, extendStore, ExtEnv, applyEnvStore, theGlobalEnv, globalEnvAddBinding, theStore } from "./L21-env-store";
+import { applyEnv, makeExtEnv, Env, Store, setStore, extendStore, ExtEnv, applyEnvStore, theGlobalEnv, globalEnvAddBinding, theStore, FBinding, isGlobalEnv } from "./L21-env-store";
 import { isClosure, makeClosure, Closure, Value } from "./L21-value-store";
 import { applyPrimitive } from "./evalPrimitive-store";
 import { first, rest, isEmpty } from "../shared/list";
-import { Result, bind, safe2, mapResult, makeFailure, makeOk, isOk } from "../shared/result";
+import { Result, bind, safe2, mapResult, makeFailure, makeOk, isOk, either } from "../shared/result";
 import { parse as p } from "../shared/parser";
+import { connect } from "node:http2";
 
 // ========================================================
 // Eval functions
@@ -32,7 +33,7 @@ const applicativeEval = (exp: CExp, env: Env): Result<Value> =>
     exp;
 
 export const isTrueValue = (x: Value): boolean =>
-    ! (x === false);
+     (x === true);
 
 const evalIf = (exp: IfExp, env: Env): Result<Value> =>
     bind(applicativeEval(exp.test, env),
@@ -51,9 +52,16 @@ const applyProcedure = (proc: Value, args: Value[]): Result<Value> =>
 
 const applyClosure = (proc: Closure, args: Value[]): Result<Value> => {
     const vars = map((v: VarDecl) => v.var, proc.params);
-    const addresses: number[] = ...
+    const addresses =  reduce(reduce_func, [],args);
     const newEnv: ExtEnv = makeExtEnv(vars, addresses, proc.env)
     return evalSequence(proc.body, newEnv);
+}
+
+const reduce_func =(acc:number[], curr:Value):number[]=>{
+    
+    theGlobalEnv.store = extendStore(theGlobalEnv.store ,curr );
+    const addr = theGlobalEnv.store.vals.length-1;
+    return acc.concat([addr]);
 }
 
 // Evaluate a sequence of expressions (in a program)
@@ -84,7 +92,7 @@ export const evalProgram = (program: Program): Result<Value> =>
 export const evalParse = (s: string): Result<Value> =>
     bind(bind(p(s), parseL21Exp), (exp: Exp) => evalSequence([exp], theGlobalEnv));
 
-
+//
 const evalSet = (exp: SetExp, env: Env): Result<void> =>
     safe2((val: Value, bdg: FBinding) => makeOk(setFBinding(bdg, val)))
         (applicativeEval(exp.val, env), applyEnvBdg(env, exp.var.var));
@@ -102,3 +110,32 @@ const evalLet = (exp: LetExp, env: Env): Result<Value> => {
         return evalSequence(exp.body, newEnv);
     })
 }
+function setFBinding(bdg: FBinding, val: string | number | boolean | void | Closure | import("./L21-ast").PrimOp | import("./L21-value-store").SymbolSExp | import("./L21-value-store").EmptySExp | import("./L21-value-store").CompoundSExp): any {
+    throw new Error("Function not implemented.");
+}
+
+export const applyEnvBdg = (env: Env, v: string): Result<FBinding> =>
+    isGlobalEnv(env) ? applyGlobalEnvBdg(env, v) :
+    isExtEnv(env) ? applyExtEnvBdg(env, v) :
+    env;
+
+function addresses(vars: string[], addresses: any, env: Env) {
+    throw new Error("Function not implemented.");
+}
+
+const applyGlobalEnvBdg = (ge:GlobalEnv, v: string): Result<FBinding> =>
+    applyFrame(unbox(ge.frame), v);
+
+
+const applyExtEnvBdg = (env: ExtEnv, v: string): Result<FBinding> =>
+    either(applyFrame(env.frame, v), makeOk, _ => applyEnvBdg(env.env, v));
+
+
+const applyFrame = (frame: Frame, v: string): Result<FBinding> => {
+    const pos = frameVars(frame).indexOf(v);
+        return (pos > -1) ? makeOk(frame.fbindings[pos]) : makeFailure(`Var not found: ${v}`);
+    };
+
+export const frameVars = (frame: Frame): string[] => map(getFBindingVar, frame.fbindings);
+export const frameVals = (frame: Frame): Value[] => map(getFBindingVal, frame.fbindings);
+    
