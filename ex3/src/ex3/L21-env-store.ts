@@ -21,7 +21,7 @@ export const isStore = (x: any): x is Store => x.tag === "Store";
 export const makeEmptyStore = (): Store => ({tag: "Store",vals:[]});
 export const theStore: Store = makeEmptyStore();
 export const extendStore = (s: Store, val: Value): Store =>
-({tag: "Store",vals:s.vals.concat([makeBox(val)])});
+    ({tag: "Store",vals:s.vals.concat([makeBox(val)])});
 
     
 export const applyStore = (store: Store, address: number): Result<Value> =>
